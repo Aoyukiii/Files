@@ -54,11 +54,11 @@ jobs:
       shell: pwsh
       run: |
         msbuild $env:SOLUTION_NAME `
-        -t:Restore `
-        -p:Platform=$env:PLATFORM `
-        -p:Configuration=$env:CONFIGURATION `
-        -p:PublishReadyToRun=true `
-        -v:quiet
+          -t:Restore `
+          -p:Platform=$env:PLATFORM `
+          -p:Configuration=$env:CONFIGURATION `
+          -p:PublishReadyToRun=true `
+          -v:quiet
 
     - name: Restore NuGet Packages for Launcher Project
       shell: pwsh
@@ -70,27 +70,30 @@ jobs:
       shell: pwsh
       run: |
         msbuild "$env:LAUNCHER_PROJECT_PATH" `
-        -t:Build `
-        -p:Platform=$env:PLATFORM `
-        -p:Configuration=$env:CONFIGURATION
+          -t:Build `
+          -p:Platform=$env:PLATFORM `
+          -p:Configuration=$env:CONFIGURATION
 
     - name: Build & package Files (Minimal)
       shell: pwsh
       run: |
         msbuild "$env:PACKAGE_PROJECT_PATH" `
-        -t:Build `
-        -p:Platform=$env:PLATFORM `
-        -p:Configuration=$env:CONFIGURATION `
-        -p:AppxBundlePlatforms=$env:APPX_BUNDLE_PLATFORMS `
-        -p:AppxPackageDir="$env:APPX_PACKAGE_DIR" `
-        -p:AppxBundle=Never `  # 简化：不生成bundle
-        -p:GenerateAppInstallerFile=false `  # 不需要appinstaller
-        -p:UapAppxPackageBuildMode=Store `  # 使用Store模式避免签名要求
-        -v:minimal
+          -t:Build `
+          -p:Platform=$env:PLATFORM `
+          -p:Configuration=$env:CONFIGURATION `
+          -p:AppxBundlePlatforms=$env:APPX_BUNDLE_PLATFORMS `
+          -p:AppxPackageDir="$env:APPX_PACKAGE_DIR" `
+          -p:AppxBundle=Never `
+          -p:GenerateAppInstallerFile=false `
+          -p:UapAppxPackageBuildMode=Store `
+          -v:minimal
 
     - name: Remove empty files
-      shell: bash
-      run: find $ARTIFACTS_STAGING_DIR -empty -delete
+      shell: pwsh
+      run: |
+        if (Test-Path $env:ARTIFACTS_STAGING_DIR) {
+          Get-ChildItem $env:ARTIFACTS_STAGING_DIR -Recurse | Where-Object { $_.Length -eq 0 } | Remove-Item -Force
+        }
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
