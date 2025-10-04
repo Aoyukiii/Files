@@ -85,7 +85,7 @@ jobs:
           -p:AppxPackageDir="$env:APPX_PACKAGE_DIR" `
           -p:AppxBundle=Never `
           -p:GenerateAppInstallerFile=false `
-          -p:UapAppxPackageBuildMode=Store `
+          -p:UapAppxPackageBuildMode=Sideload `
           -v:minimal
 
     - name: Remove empty files
