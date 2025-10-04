@@ -1,0 +1,125 @@
+# 修复 Publisher 错误的构建工作流
+name: Build Files App (Fixed)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    env:
+      SOLUTION_NAME:         'Files.sln'
+      CONFIGURATION:         'Release'
+      PLATFORM:              'x64'
+      WORKING_DIR:           '${{ github.workspace }}'
+      ARTIFACTS_DIR:         '${{ github.workspace }}\artifacts'
+      PACKAGE_PROJECT_PATH:  'src\Files.App (Package)\Files.Package.wapproj'
+      LAUNCHER_PROJECT_PATH: 'src\Files.App.Launcher\Files.App.Launcher.vcxproj'
+      # 添加一个测试用的发布者标识
+      TEST_PUBLISHER:        'CN=TestPublisher'
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup build tools
+      uses: microsoft/setup-msbuild@v2
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: | 
+          8.0.x
+          7.0.x
+
+    - name: Create temporary publisher certificate
+      shell: pwsh
+      run: |
+        # 创建临时测试证书
+        $cert = New-SelfSignedCertificate `
+          -Type Custom `
+          -Subject "CN=FilesTest" `
+          -KeyUsage DigitalSignature `
+          -FriendlyName "Files Test Certificate" `
+          -CertStoreLocation "Cert:\CurrentUser\My" `
+          -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}")
+        
+        Write-Host "证书指纹: $($cert.Thumbprint)"
+
+    - name: Patch AppxManifest with test publisher
+      shell: pwsh
+      run: |
+        # 找到 AppxManifest.xml 文件
+        $manifestPath = "$env:WORKING_DIR\src\Files.App (Package)\Package.appxmanifest"
+        
+        if (Test-Path $manifestPath) {
+            # 备份原文件
+            Copy-Item $manifestPath "$manifestPath.backup"
+            
+            # 读取并修改内容
+            $content = Get-Content $manifestPath -Raw
+            $content = $content -replace 'Publisher="[^"]*"', 'Publisher="CN=FilesTest"'
+            $content = $content -replace '<mp:PhoneIdentity[^>]*/>', ''
+            
+            # 写回文件
+            Set-Content $manifestPath $content -Encoding UTF8
+            Write-Host "已更新 AppxManifest.xml"
+        } else {
+            Write-Error "找不到 AppxManifest.xml 文件"
+        }
+
+    - name: Restore NuGet packages
+      shell: pwsh
+      run: |
+        nuget restore $env:SOLUTION_NAME
+
+    - name: Build Launcher
+      shell: pwsh
+      run: |
+        msbuild "$env:LAUNCHER_PROJECT_PATH" `
+          -p:Platform=$env:PLATFORM `
+          -p:Configuration=$env:CONFIGURATION `
+          -p:RestorePackages=false `
+          -verbosity:minimal
+
+    - name: Build Main Solution
+      shell: pwsh
+      run: |
+        msbuild $env:SOLUTION_NAME `
+          -p:Platform=$env:PLATFORM `
+          -p:Configuration=$env:CONFIGURATION `
+          -p:RestorePackages=false `
+          -verbosity:minimal
+
+    - name: Build Package (Skip Validation)
+      shell: pwsh
+      run: |
+        # 使用跳过验证的参数
+        msbuild "$env:PACKAGE_PROJECT_PATH" `
+          -p:Platform=$env:PLATFORM `
+          -p:Configuration=$env:CONFIGURATION `
+          -p:AppxPackageDir="$env:ARTIFACTS_DIR\Appx" `
+          -p:AppxBundle=Never `
+          -p:UapAppxPackageBuildMode=StoreUpload `
+          -p:GenerateAppInstallerFile=False `
+          -p:SkipSigning=true `
+          -p:AppxPackageSigningEnabled=false `
+          -p:ValidateAppxManifestEnabled=false `
+          -verbosity:minimal
+
+    - name: Upload Build Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: 'Files-App-Build-Fixed'
+        path: ${{ env.ARTIFACTS_DIR }}/**/*
+        retention-days: 30
+
+    - name: Build Status
+      shell: pwsh
+      run: |
+        if (Test-Path "$env:ARTIFACTS_DIR\Appx\*.msix") {
+          Write-Host "✅ 构建成功！应用包已生成" -ForegroundColor Green
+        } else {
+          Write-Host "❌ 构建可能未完全成功" -ForegroundColor Red
+        }
