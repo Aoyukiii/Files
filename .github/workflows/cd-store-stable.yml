@@ -108,7 +108,7 @@ jobs:
         -p:AppxBundlePlatforms=$env:APPX_BUNDLE_PLATFORMS `
         -p:AppxPackageDir="$env:APPX_PACKAGE_DIR" `
         -p:AppxBundle=Always `
-        -p:UapAppxPackageBuildMode=StoreUpload `
+        -p:UapAppxPackageBuildMode=Sideload `
         -v:quiet
 
     - name: Remove empty files from the packages
